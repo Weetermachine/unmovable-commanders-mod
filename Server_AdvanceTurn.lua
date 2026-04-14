@@ -1,155 +1,87 @@
 -- Server_AdvanceTurn.lua
--- Detects surrendering players via player.Surrendered flag in _Start,
--- snapshots their territories from PreviousTurnStanding (before Warzone
--- neutralizes them), picks a teammate, then reassigns in _End.
+-- "Stationary Commander" mod
+--
+-- Commanders cannot move or attack. When armies leave a territory that has
+-- a commander included in the order's armies, the order is cancelled and
+-- re-issued without the commander.
+--
+-- Optionally (configurable at game setup), airlifts from a commander's
+-- territory that include the commander are also blocked.
+--
+-- Commanders still defend normally.
 
------------------------------------------------------------------------
--- Helpers
------------------------------------------------------------------------
-
--- Returns whether the game has actual teams configured.
--- In a no-teams game, every player has the same team ID (0), so we
--- must detect this and treat it as "no teammates".
-local function gameHasTeams(players)
-    local firstTeam = nil
-    for _, player in pairs(players) do
-        if firstTeam == nil then
-            firstTeam = player.Team
-        elseif player.Team ~= firstTeam then
-            return true  -- at least two different team IDs = teams are configured
-        end
-    end
-    return false  -- everyone on the same team = no teams
-end
-
-local function getAliveTeammates(players, surrenderingPlayerID, surrenderingTeam)
-    local teammates = {}
-    for _, player in pairs(players) do
-        if player.ID ~= surrenderingPlayerID
-           and player.Team == surrenderingTeam
-           and player.State == WL.GamePlayerState.Playing then
-            teammates[#teammates + 1] = player
-        end
-    end
-    return teammates
-end
-
-local function pickTeammate(teammates, mode, standing)
-    if #teammates == 0 then return nil end
-    if mode == 'Random' then
-        return teammates[math.random(1, #teammates)]
-    elseif mode == 'LowestIncome' then
-        local best, bestIncome = nil, math.huge
-        for _, player in ipairs(teammates) do
-            local income = player.Income(0, standing, false, false).Total
-            if income < bestIncome then bestIncome = income; best = player end
-        end
-        return best
-    else -- HighestIncome (default)
-        local best, bestIncome = nil, -1
-        for _, player in ipairs(teammates) do
-            local income = player.Income(0, standing, false, false).Total
-            if income > bestIncome then bestIncome = income; best = player end
-        end
-        return best
-    end
-end
-
-local function getTerritoriesOwnedBy(standing, playerID)
-    local owned = {}
-    for terrID, ts in pairs(standing.Territories) do
-        if ts.OwnerPlayerID == playerID then
-            owned[#owned + 1] = terrID
-        end
-    end
-    return owned
-end
-
-local function tableHasKeys(t)
-    for _ in pairs(t) do return true end
-    return false
-end
-
------------------------------------------------------------------------
--- Turn-global state
------------------------------------------------------------------------
-_SRMod_transfers = {}
-
------------------------------------------------------------------------
--- _Start: detect surrenders and snapshot territories from previous turn
------------------------------------------------------------------------
 function Server_AdvanceTurn_Start(game, addNewOrder)
-    _SRMod_transfers = {}
+end
 
-    local sg      = game.ServerGame
-    local players = game.Game.Players
-    local mode    = (Mod.Settings.TransferMode or 'HighestIncome')
-
-    -- PreviousTurnStanding still has the surrendering player's territories
-    -- because Warzone hasn't neutralized them yet relative to that snapshot.
-    local prevStanding = sg.PreviousTurnStanding
-
-    -- If the game has no teams, do nothing regardless of surrenders
-    if not gameHasTeams(players) then return end
-
-    for _, player in pairs(players) do
-        if player.Surrendered == true then
-            local surrenderingID = player.ID
-            local teammates = getAliveTeammates(players, surrenderingID, player.Team)
-
-            if #teammates == 0 then
-                -- No alive teammates, do nothing
-            else
-                local recipient        = pickTeammate(teammates, mode, prevStanding)
-                local ownedTerritories = getTerritoriesOwnedBy(prevStanding, surrenderingID)
-
-                if #ownedTerritories > 0 and recipient ~= nil then
-                    _SRMod_transfers[surrenderingID] = {
-                        terrIDs     = ownedTerritories,
-                        recipientID = recipient.ID,
-                    }
-                end
-            end
+-- Find the commander belonging to playerID in an Armies object.
+-- Returns the SpecialUnit object, or nil if not found.
+local function findCommanderInArmies(armies, playerID)
+    local units = armies.SpecialUnits
+    if units == nil then return nil end
+    for _, unit in ipairs(units) do
+        if unit.OwnerID == playerID and unit.proxyType == 'Commander' then
+            return unit
         end
     end
+    return nil
 end
 
------------------------------------------------------------------------
--- _Order: no-op (surrender doesn't appear as an in-turn order)
------------------------------------------------------------------------
 function Server_AdvanceTurn_Order(game, order, orderResult, skipThisOrder, addNewOrder)
-end
+    local playerID  = order.PlayerID
+    local commander = nil
+    local isAirlift = false
 
------------------------------------------------------------------------
--- _End: reassign the now-neutral territories to the chosen teammate
------------------------------------------------------------------------
-function Server_AdvanceTurn_End(game, addNewOrder)
-    if not tableHasKeys(_SRMod_transfers) then return end
+    if order.proxyType == 'GameOrderAttackTransfer' then
+        commander = findCommanderInArmies(order.NumArmies, playerID)
 
-    local players = game.Game.Players
+    elseif order.proxyType == 'GameOrderPlayCardAirlift' then
+        -- Only intercept airlifts if the setting is enabled
+        if Mod.Settings.BlockAirlifts ~= true then return end
+        commander = findCommanderInArmies(order.Armies, playerID)
+        isAirlift = true
+    else
+        return
+    end
 
-    for surrenderingID, transfer in pairs(_SRMod_transfers) do
-        local mods = {}
-        for _, terrID in ipairs(transfer.terrIDs) do
-            local mod = WL.TerritoryModification.Create(terrID)
-            mod.SetOwnerOpt = transfer.recipientID
-            mods[#mods + 1] = mod
-        end
+    if commander == nil then return end
 
-        local surrenderingName = players[surrenderingID].DisplayName(nil, false)
-        local recipientName    = players[transfer.recipientID].DisplayName(nil, false)
-        local msg = surrenderingName .. ' surrendered. Their '
-                    .. #transfer.terrIDs
-                    .. ' territories have been transferred to teammate '
-                    .. recipientName .. '.'
+    -- Skip the original order silently and re-issue without the commander
+    skipThisOrder(WL.ModOrderControl.SkipAndSupressSkippedMessage)
 
-        addNewOrder(WL.GameOrderEvent.Create(
-            surrenderingID,
-            msg,
-            nil,  -- visible to everyone
-            mods,
-            nil,
-            nil
+    if isAirlift then
+        -- Re-issue airlift with commander stripped from armies
+        local commanderArmies       = WL.Armies.Create(0, { commander })
+        local armiesWithoutCommander = order.Armies.Subtract(commanderArmies)
+
+        -- If only the commander was being airlifted, cancel entirely
+        if armiesWithoutCommander.IsEmpty then return end
+
+        addNewOrder(WL.GameOrderPlayCardAirlift.Create(
+            order.CardInstanceID,
+            playerID,
+            order.FromTerritoryID,
+            order.ToTerritoryID,
+            armiesWithoutCommander
+        ))
+    else
+        -- Re-issue attack/transfer with commander stripped from armies
+        local commanderArmies       = WL.Armies.Create(0, { commander })
+        local armiesWithoutCommander = order.NumArmies.Subtract(commanderArmies)
+
+        -- If only the commander was attacking, cancel entirely
+        if armiesWithoutCommander.IsEmpty then return end
+
+        addNewOrder(WL.GameOrderAttackTransfer.Create(
+            playerID,
+            order.From,
+            order.To,
+            order.AttackTransfer,
+            order.ByPercent,
+            armiesWithoutCommander,
+            order.AttackTeammates
         ))
     end
+end
+
+function Server_AdvanceTurn_End(game, addNewOrder)
 end

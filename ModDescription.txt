@@ -1,20 +1,20 @@
-Surrender Redistribute
-======================
-When a player surrenders, their territories are automatically transferred to a teammate instead of turning neutral. This keeps the team competitive even when a player has to leave the game, and prevents surrenders from punching a hole in your team's defenses.
+Stationary Commander
+====================
+Commanders cannot move or attack. When armies leave a territory that has a commander on it — whether by attacking, transferring, or airlifting — the commander is left behind on their current territory.
 
-If the surrendering player has no teammates, or is playing in a game without teams, the mod does nothing and territories turn neutral as normal.
+This fundamentally changes how commanders work: instead of a mobile unit that leads your armies across the map, the commander becomes a fixed defensive anchor. Losing your commander's territory means losing the game, so you must fortify and defend it carefully rather than rushing it forward.
 
-Transfer modes
---------------
-When setting up the game, the host can choose how the recipient teammate is selected:
-
-- Highest Income Teammate: territories go to whichever teammate currently earns the most armies per turn. Good for snowballing a strong player even further.
-- Lowest Income Teammate: territories go to whichever teammate currently earns the fewest armies per turn. Good for keeping the team balanced and propping up a weaker player.
-- Random Teammate: territories go to a randomly selected teammate each time. Good for unpredictability or when all teammates are roughly equal.
+How it works
+------------
+- If you attack from a territory that has your commander on it, your armies attack normally but your commander stays put.
+- If you transfer armies out of a commander's territory, the commander remains.
+- If you airlift armies from a commander's territory, the commander is not airlifted with them.
+- Commanders still defend normally — they fight at full strength when their territory is attacked.
+- Commanders can still be killed if their territory is successfully captured.
 
 Tips
 ----
-- In longer games, consider setting the mode to Lowest Income so a surrendering player's territories shore up your weakest link rather than padding the strongest.
-- The transfer happens at the end of the turn in which the surrender is processed, so the surrendering player's orders for that turn still execute first.
-- This mod works in any team configuration — 2v2, 3v3, uneven teams, and so on.
-- In free-for-all games with no teams, this mod has no effect.
+- Your commander's starting territory is essentially your "base" — losing it means elimination, so stack defenses there.
+- You can no longer use your commander as an offensive weapon, so plan your attacks using normal armies only.
+- Because your commander can't advance, opponents know exactly where it is at all times. Use terrain and bonus structures to compensate.
+- This mod pairs well with large maps where the commander's immobility creates interesting strategic tradeoffs between offense and defense.

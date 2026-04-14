@@ -1,21 +1,15 @@
 -- Client_PresentSettingsUI.lua
--- Displays the currently active transfer mode in the in-game Game Settings panel.
 
 function Client_PresentSettingsUI(rootParent)
-    local mode = Mod.Settings.TransferMode or 'HighestIncome'
-
-    local labels = {
-        HighestIncome = 'Highest Income Teammate',
-        LowestIncome  = 'Lowest Income Teammate',
-        Random        = 'Random Teammate',
-    }
-
     local vert = UI.CreateVerticalLayoutGroup(rootParent)
 
     UI.CreateLabel(vert)
-        .SetText('Surrender Redistribute Mod')
+        .SetText('Stationary Commander')
         .SetColor('#FFD700')
 
+    local blockAirlifts = Mod.Settings.BlockAirlifts == true
+
     UI.CreateLabel(vert)
-        .SetText('Surrender territories go to: ' .. (labels[mode] or mode))
+        .SetText('Commanders cannot move or attack. Armies leave without them.\n\n'
+                 .. 'Block airlifting commander: ' .. (blockAirlifts and 'Yes' or 'No'))
 end
